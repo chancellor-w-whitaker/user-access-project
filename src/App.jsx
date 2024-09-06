@@ -62,29 +62,30 @@ const helpers = {
     classNames
       .filter((string) => typeof string === "string" && string.length > 0)
       .join(" "),
+  iconColors: {
+    bg: { default: "body-secondary", active: "primary" },
+    text: { default: "body-emphasis", active: "white" },
+  },
   getRandomElement: (array) => array[Math.floor(Math.random() * array.length)],
-  defaultIconTextColor: "body-emphasis",
-  defaultIconBgColor: "body-secondary",
-  isClickedColor: "primary-subtle",
-  isDoubleClickedColor: "primary",
+  listItemClickedVariant: "primary",
   connectingListName: "groups",
+  badgeColor: "secondary",
 };
 
 const {
-  defaultIconTextColor,
-  isDoubleClickedColor,
-  defaultIconBgColor,
+  listItemClickedVariant,
   connectingListName,
   getRandomElement,
   joinClassNames,
-  isClickedColor,
+  iconColors,
+  badgeColor,
   titleCase,
   lists,
 } = helpers;
 
 const IconSquare = ({
-  text = defaultIconTextColor,
-  bg = defaultIconBgColor,
+  text = iconColors.text.default,
+  bg = iconColors.bg.default,
   className = "",
   ...props
 }) => {
@@ -139,52 +140,116 @@ for (const category of categories) {
   initializeConnection({ category, rules });
 }
 
+const findListIcon = (listName) =>
+  lists.find(({ name }) => name === listName).icon;
+
+// write method for adding item to item
+// write method for deleting item from item
+
+// implement logic for maintaining checklist of once checked items
+// in other words, to save an action, simply check it
+// (and it will appear greyed out, like in the 3rd example on this page:
+// https://getbootstrap.com/docs/5.3/examples/list-groups/)
+// any action that gets checked as it occurs in the list is considered to be saved,
+// and will remain in the list for the remainder of the app session
+// checklist item onChange handler (will run setConnections)--
+// if ("delete" in actionData && e.target.checked) deleteItemFromCategory()
+// if ("delete" in actionData && !e.target.checked) addItemToCategory()
+// if ("add" in actionData && e.target.checked) addItemToCategory()
+// if ("add" in actionData && !e.target.checked) deleteItemFromCategory()
+
 export default function App() {
   const [connections, setConnections] = useState(initialConnections);
 
-  const isGroupConnectedToUser = ({ group, user }) =>
-    connections[group].users.has(user);
+  const [activeItems, setActiveItems] = useState([]);
 
-  const isGroupConnectedToReport = ({ report, group }) =>
-    connections[group].reports.has(report);
-
-  console.log(connections);
-
-  const [activeItems, setActiveItems] = useState(
-    Object.fromEntries(
-      lists.map(({ name }) => [name, { type: null, item: null }])
-    )
-  );
+  const findActiveItem = (name) =>
+    activeItems.find((element) => element.name === name) &&
+    activeItems.find((element) => element.name === name);
 
   const getItemClickHandler =
     ({ name, item }) =>
     ({ type }) =>
-      setActiveItems((state) => ({
-        ...state,
-        [name]: { item, type },
-      }));
+      setActiveItems((state) => {
+        const sameOneClicked = state.find(
+          (element) =>
+            element.name === name &&
+            element.item === item &&
+            element.type === "click"
+        );
 
-  const isItemClicked = ({ name, item }) =>
-    activeItems[name].item === item && activeItems[name].type === "click";
+        const filteredState = state.filter((element) => element.name !== name);
 
-  const isItemDoubleClicked = ({ name, item }) =>
-    activeItems[name].item === item && activeItems[name].type === "dblclick";
+        return sameOneClicked && type === "click"
+          ? filteredState
+          : [...filteredState, { name, item, type }];
+      });
 
-  const isItemDisabled = ({ name, item }) =>
-    activeItems[name].item !== item && activeItems[name].type === "dblclick";
+  const isItemClicked = ({ name, item }) => {
+    const activeItemOfList = findActiveItem(name);
 
-  const isAnyListItemDoubleClicked = (name) =>
-    activeItems[name].type === "dblclick";
+    return (
+      activeItemOfList &&
+      activeItemOfList.item === item &&
+      activeItemOfList.type === "click"
+    );
+  };
 
-  const isAnyListItemClicked = (name) => activeItems[name].type === "click";
+  const isItemDoubleClicked = ({ name, item }) => {
+    const activeItemOfList = findActiveItem(name);
+
+    return (
+      activeItemOfList &&
+      activeItemOfList.item === item &&
+      activeItemOfList.type === "dblclick"
+    );
+  };
+
+  const someGroupDoubleClicked = activeItems.some(
+    ({ name, type }) => name === "groups" && type === "dblclick"
+  );
+
+  const disableAllUsers = activeItems.some(
+    ({ name, type }) => name === "reports" && type === "dblclick"
+  );
+
+  const disableAllReports = activeItems.some(
+    ({ name, type }) => name === "users" && type === "dblclick"
+  );
+
+  const isItemDisabled = ({ name, item }) => {
+    const activeItemOfList = findActiveItem(name);
+
+    if (name === "users" && disableAllUsers) {
+      return true;
+    }
+
+    if (name === "reports" && disableAllReports) {
+      return true;
+    }
+
+    return (
+      activeItemOfList &&
+      activeItemOfList.item !== item &&
+      activeItemOfList.type === "dblclick"
+    );
+  };
+
+  const isAnyListItemDoubleClicked = (name) => {
+    const activeItemOfList = findActiveItem(name);
+
+    return activeItemOfList && activeItemOfList.type === "dblclick";
+  };
 
   const getIconTextColor = (name) =>
-    isAnyListItemDoubleClicked(name) ? "white" : defaultIconTextColor;
+    isAnyListItemDoubleClicked(name)
+      ? iconColors.text.active
+      : iconColors.text.default;
 
   const getIconBgColor = (name) =>
     isAnyListItemDoubleClicked(name)
-      ? isDoubleClickedColor
-      : defaultIconBgColor;
+      ? iconColors.bg.active
+      : iconColors.bg.default;
 
   const renderIcon = (suffix) => <i className={`bi bi-${suffix}`} />;
 
@@ -197,6 +262,108 @@ export default function App() {
     </div>
   );
 
+  const activeGroup = findActiveItem("groups")
+    ? findActiveItem("groups").item
+    : null;
+
+  const activeUser = findActiveItem("users")
+    ? findActiveItem("users").item
+    : null;
+
+  const activeReport = findActiveItem("reports")
+    ? findActiveItem("reports").item
+    : null;
+
+  const isGroupConnectedToActiveUser = (group) =>
+    connections[group].users.has(activeUser);
+
+  const isGroupConnectedToActiveReport = (group) =>
+    connections[group].reports.has(activeReport);
+
+  const isUserConnectedToActiveGroup = (user) =>
+    activeGroup in connections && connections[activeGroup].users.has(user);
+
+  const isReportConnectedToActiveGroup = (report) =>
+    activeGroup in connections && connections[activeGroup].reports.has(report);
+
+  const isUserConnectedToActiveReport = (user) =>
+    Object.entries(connections)
+      .filter(([group, { reports }]) => reports.has(activeReport))
+      .some(([group, { users }]) => users.has(user));
+
+  const isReportConnectedToActiveUser = (report) =>
+    Object.entries(connections)
+      .filter(([group, { users }]) => users.has(activeUser))
+      .some(([group, { reports }]) => reports.has(report));
+
+  const renderBadge = (listName) => (
+    <Badge className="shadow bg-gradient" bg={badgeColor} pill>
+      {renderIcon(findListIcon(listName))}
+    </Badge>
+  );
+
+  const renderBadges = ({ name, item }) => {
+    if (name === "groups") {
+      return [
+        isGroupConnectedToActiveUser(item) && renderBadge("users"),
+        isGroupConnectedToActiveReport(item) && renderBadge("reports"),
+      ];
+    }
+
+    if (name === "users") {
+      return [
+        isUserConnectedToActiveGroup(item) && renderBadge("groups"),
+        isUserConnectedToActiveReport(item) && renderBadge("reports"),
+      ];
+    }
+
+    if (name === "reports") {
+      return [
+        isReportConnectedToActiveGroup(item) && renderBadge("groups"),
+        isReportConnectedToActiveUser(item) && renderBadge("users"),
+      ];
+    }
+  };
+
+  const actionableUser = someGroupDoubleClicked && disableAllUsers;
+
+  const actionableReport = someGroupDoubleClicked && disableAllReports;
+
+  const getActionData = () => {
+    if (!actionableUser && !actionableReport) {
+      return false;
+    }
+
+    const category = Object.fromEntries(
+      Object.entries(
+        activeItems.find(({ name }) => name === connectingListName)
+      ).filter(([key]) => key === "name" || key === "item")
+    );
+
+    const actionable = Object.fromEntries(
+      Object.entries(
+        activeItems.find(({ name }) => name !== connectingListName)
+      ).filter(([key]) => key === "name" || key === "item")
+    );
+
+    if (connections[category.item][actionable.name].has(actionable.item)) {
+      return { delete: actionable, from: category };
+    }
+
+    if (!connections[category.item][actionable.name].has(actionable.item)) {
+      return { add: actionable, to: category };
+    }
+  };
+
+  const actionData = getActionData();
+
+  const actionDescribed = actionData
+    ? Object.entries(actionData)
+        .map(([key, { item }]) => [key, item])
+        .flat()
+        .join(" ")
+    : null;
+
   return (
     <>
       <Container>
@@ -208,56 +375,32 @@ export default function App() {
                 <ListGroup>
                   {items.map((item, j) => (
                     <ListGroup.Item
-                      className={joinClassNames(
-                        "d-flex gap-2 align-items-center",
-                        (isItemDisabled({ name, item }) ||
-                          (name === "groups" &&
-                            isGroupConnectedToUser({
-                              user: activeItems.users.item,
-                              group: item,
-                            }) &&
-                            isGroupConnectedToReport({
-                              report: activeItems.reports.item,
-                              group: item,
-                            }))) &&
-                          "text-decoration-line-through"
-                      )}
                       variant={isItemClicked({ name, item }) && "primary"}
                       onDoubleClick={getItemClickHandler({ name, item })}
                       onClick={getItemClickHandler({ name, item })}
                       active={isItemDoubleClicked({ name, item })}
+                      className="d-flex gap-2 align-items-center"
                       disabled={isItemDisabled({ name, item })}
                       key={j}
                     >
                       <div className="me-auto">{item}</div>
-                      {name === "groups" && [
-                        isGroupConnectedToUser({
-                          user: activeItems.users.item,
-                          group: item,
-                        }) && (
-                          <Badge bg="secondary" pill>
-                            {renderIcon(
-                              lists.find(({ name }) => name === "users").icon
-                            )}
-                          </Badge>
-                        ),
-                        isGroupConnectedToReport({
-                          report: activeItems.reports.item,
-                          group: item,
-                        }) && (
-                          <Badge bg="secondary" pill>
-                            {renderIcon(
-                              lists.find(({ name }) => name === "reports").icon
-                            )}
-                          </Badge>
-                        ),
-                      ]}
+                      {renderBadges({ item, name })}
                     </ListGroup.Item>
                   ))}
                 </ListGroup>
               </Stack>
             </Col>
           ))}
+        </Row>
+        <Row>
+          <Row>
+            <Col>Actions</Col>
+          </Row>
+          <Row>
+            <Col>
+              <Stack>{actionDescribed}</Stack>
+            </Col>
+          </Row>
         </Row>
       </Container>
     </>

@@ -5,3 +5,12 @@
   transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
     border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
+
+.list-group-item.disabled,
+.list-group-item:disabled {
+  color: rgba(33, 37, 41, 0.5);
+}
+
+.list-group-item-primary {
+  --bs-list-group-disabled-bg: #cfe2ff;
+}
