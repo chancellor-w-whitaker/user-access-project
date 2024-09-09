@@ -14,3 +14,8 @@
 .list-group-item-primary {
   --bs-list-group-disabled-bg: #cfe2ff;
 }
+
+.danger-checkbox > .form-check-input:checked {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}

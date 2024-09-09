@@ -2,6 +2,7 @@ import Container from "react-bootstrap/Container";
 import ListGroup from "react-bootstrap/ListGroup";
 import Stack from "react-bootstrap/Stack";
 import Badge from "react-bootstrap/Badge";
+import Form from "react-bootstrap/Form";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import { useState } from "react";
@@ -158,10 +159,73 @@ const findListIcon = (listName) =>
 // if ("add" in actionData && e.target.checked) addItemToCategory()
 // if ("add" in actionData && !e.target.checked) deleteItemFromCategory()
 
+// for those active when pending exists, if pending method is delete, make active bg danger color
+
 export default function App() {
   const [connections, setConnections] = useState(initialConnections);
 
   const [activeItems, setActiveItems] = useState([]);
+
+  const [savedActions, setSavedActions] = useState([]);
+
+  const getActionCoordinates = (action) =>
+    action.items
+      .map((item) => Object.entries(item))
+      .flat()
+      .join("-");
+
+  const getActionHandler =
+    (action) =>
+    ({ target: { checked } }) => {
+      const { method, items } = action;
+
+      setConnections((state) => {
+        const nextState = { ...state };
+
+        const group = items[1].item;
+
+        const listName = items[0].name;
+
+        const listItem = items[0].item;
+
+        nextState[group] = { ...nextState[group] };
+
+        nextState[group][listName] = new Set(nextState[group][listName]);
+
+        const set = nextState[group][listName];
+
+        if (
+          (method === "add" && checked) ||
+          (method === "delete" && !checked)
+        ) {
+          set.add(listItem);
+        } else {
+          set.delete(listItem);
+        }
+
+        return nextState;
+      });
+
+      if (!("id" in action)) {
+        setActiveItems([]);
+      }
+
+      if (!("id" in action)) {
+        setSavedActions((array) => [
+          { ...action, id: Math.random(), checked },
+          ...array.filter(
+            (element) =>
+              getActionCoordinates(element) !== getActionCoordinates(action)
+          ),
+        ]);
+      } else {
+        setSavedActions((array) =>
+          array.map((element) =>
+            element.id === action.id ? { ...element, checked } : element
+          )
+        );
+      }
+    };
 
   const findActiveItem = (name) =>
     activeItems.find((element) => element.name === name) &&
@@ -241,27 +305,6 @@ export default function App() {
     return activeItemOfList && activeItemOfList.type === "dblclick";
   };
 
-  const getIconTextColor = (name) =>
-    isAnyListItemDoubleClicked(name)
-      ? iconColors.text.active
-      : iconColors.text.default;
-
-  const getIconBgColor = (name) =>
-    isAnyListItemDoubleClicked(name)
-      ? iconColors.bg.active
-      : iconColors.bg.default;
-
-  const renderIcon = (suffix) => <i className={`bi bi-${suffix}`} />;
-
-  const renderListHeader = ({ icon, name }) => (
-    <div className="d-flex align-items-center">
-      <IconSquare text={getIconTextColor(name)} bg={getIconBgColor(name)}>
-        {renderIcon(icon)}
-      </IconSquare>
-      <h2 className="mb-0">{titleCase(name)}</h2>
-    </div>
-  );
-
   const activeGroup = findActiveItem("groups")
     ? findActiveItem("groups").item
     : null;
@@ -334,40 +377,79 @@ export default function App() {
       return false;
     }
 
+    const relationship = activeItems.filter(({ type }) => type === "dblclick");
+
     const category = Object.fromEntries(
       Object.entries(
-        activeItems.find(({ name }) => name === connectingListName)
+        relationship.find(({ name }) => name === connectingListName)
       ).filter(([key]) => key === "name" || key === "item")
     );
 
     const actionable = Object.fromEntries(
       Object.entries(
-        activeItems.find(({ name }) => name !== connectingListName)
+        relationship.find(({ name }) => name !== connectingListName)
       ).filter(([key]) => key === "name" || key === "item")
     );
 
-    if (connections[category.item][actionable.name].has(actionable.item)) {
-      return { delete: actionable, from: category };
-    }
-
-    if (!connections[category.item][actionable.name].has(actionable.item)) {
-      return { add: actionable, to: category };
-    }
+    return {
+      method: connections[category.item][actionable.name].has(actionable.item)
+        ? "delete"
+        : "add",
+      items: [actionable, category],
+      checked: false,
+    };
   };
 
-  const actionData = getActionData();
+  const pendingAction = getActionData();
 
-  const actionDescribed = actionData
-    ? Object.entries(actionData)
-        .map(([key, { item }]) => [key, item])
-        .flat()
-        .join(" ")
-    : null;
+  const describeAction = ({ method, items }) =>
+    items
+      .map((object, index) => [
+        index === 0 ? method : method === "delete" ? "from" : "to",
+        object,
+      ])
+      .map(([key, { item }]) => [key, item])
+      .flat()
+      .join(" ");
+
+  const actions = pendingAction
+    ? [
+        ...savedActions.filter(
+          (action) =>
+            getActionCoordinates(action) !== getActionCoordinates(pendingAction)
+        ),
+      ]
+    : savedActions;
+
+  const getIconTextColor = (name) =>
+    isAnyListItemDoubleClicked(name)
+      ? iconColors.text.active
+      : iconColors.text.default;
+
+  const getIconBgColor = (name) =>
+    isAnyListItemDoubleClicked(name)
+      ? pendingAction && pendingAction.method === "delete"
+        ? "danger"
+        : "primary"
+      : iconColors.bg.default;
+
+  const renderIcon = (suffix) => <i className={`bi bi-${suffix}`} />;
+
+  const renderListHeader = ({ icon, name }) => (
+    <div className="d-flex align-items-center">
+      <IconSquare text={getIconTextColor(name)} bg={getIconBgColor(name)}>
+        {renderIcon(icon)}
+      </IconSquare>
+      <h2 className="mb-0">{titleCase(name)}</h2>
+    </div>
+  );
+
+  console.log(actions);
 
   return (
     <>
       <Container>
-        <Row>
+        <Row className="mb-3">
           {lists.map(({ items, name, icon }, i) => (
             <Col key={i}>
               <Stack gap={3}>
@@ -375,11 +457,16 @@ export default function App() {
                 <ListGroup>
                   {items.map((item, j) => (
                     <ListGroup.Item
+                      className={`d-flex gap-2 align-items-center${
+                        isItemDoubleClicked({ name, item }) &&
+                        pendingAction.method === "delete"
+                          ? " text-bg-danger border-danger"
+                          : ""
+                      }`}
                       variant={isItemClicked({ name, item }) && "primary"}
                       onDoubleClick={getItemClickHandler({ name, item })}
                       onClick={getItemClickHandler({ name, item })}
                       active={isItemDoubleClicked({ name, item })}
-                      className="d-flex gap-2 align-items-center"
                       disabled={isItemDisabled({ name, item })}
                       key={j}
                     >
@@ -394,11 +481,40 @@ export default function App() {
         </Row>
         <Row>
           <Row>
-            <Col>Actions</Col>
+            <Col>
+              <h4>Actions</h4>
+            </Col>
           </Row>
           <Row>
             <Col>
-              <Stack>{actionDescribed}</Stack>
+              <Form>
+                <div className="mb-3">
+                  <h5>Pending</h5>
+                  {pendingAction ? (
+                    <Form.Check
+                      onChange={getActionHandler(pendingAction)}
+                      label={describeAction(pendingAction)}
+                      checked={pendingAction.checked}
+                      type="checkbox"
+                    />
+                  ) : (
+                    <div style={{ marginBottom: ".125rem" }}>...</div>
+                  )}
+                  <h5>History</h5>
+                  {actions.map((action, index) => (
+                    <Form.Check
+                      className={
+                        action.method === "delete" && "danger-checkbox"
+                      }
+                      onChange={getActionHandler(action)}
+                      label={describeAction(action)}
+                      checked={action.checked}
+                      type="checkbox"
+                      key={index}
+                    />
+                  ))}
+                </div>
+              </Form>
             </Col>
           </Row>
         </Row>
