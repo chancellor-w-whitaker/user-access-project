@@ -340,7 +340,7 @@ export default function App() {
       .some(([group, { reports }]) => reports.has(report));
 
   const renderBadge = (listName) => (
-    <Badge className="shadow bg-gradient" bg={badgeColor} pill>
+    <Badge className="shadow bg-gradient" bg={badgeColor} key={listName} pill>
       {renderIcon(findListIcon(listName))}
     </Badge>
   );
@@ -444,7 +444,35 @@ export default function App() {
     </div>
   );
 
-  console.log(actions);
+  const checkIfChangingRelationshipBetweenUserAndReport = () => {
+    const doubleClickedItems = activeItems.filter(
+      ({ type }) => type === "dblclick"
+    );
+
+    const condition =
+      doubleClickedItems.find(({ name }) => name === "users") &&
+      doubleClickedItems.find(({ name }) => name === "reports") &&
+      doubleClickedItems.length === 2;
+
+    return condition;
+  };
+
+  const isListItemDisabled = ({ name: listName, item: itemName }) => {
+    const doubleClickedLists = activeItems.filter(
+      ({ type }) => type === "dblclick"
+    );
+
+    const listNames = new Set(doubleClickedLists.map(({ name }) => name));
+
+    if (listNames.has(listName)) {
+      return (
+        doubleClickedLists.find(({ name }) => name === listName).item !==
+        itemName
+      );
+    }
+
+    return !listNames.has(listName) && listNames.size === 2;
+  };
 
   return (
     <>
@@ -466,8 +494,8 @@ export default function App() {
                       variant={isItemClicked({ name, item }) && "primary"}
                       onDoubleClick={getItemClickHandler({ name, item })}
                       onClick={getItemClickHandler({ name, item })}
+                      disabled={isListItemDisabled({ name, item })}
                       active={isItemDoubleClicked({ name, item })}
-                      disabled={isItemDisabled({ name, item })}
                       key={j}
                     >
                       <div className="me-auto">{item}</div>
