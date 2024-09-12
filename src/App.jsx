@@ -25,6 +25,7 @@ const helpers = {
       items: ["chance", "chase", "autumn", "ethan", "zoie", "josh"],
       icon: "person-fill",
       name: "users",
+      unit: "user",
     },
     {
       items: [
@@ -37,6 +38,7 @@ const helpers = {
       ],
       icon: "people-fill",
       name: "groups",
+      unit: "group",
     },
     {
       items: [
@@ -49,6 +51,7 @@ const helpers = {
       ],
       icon: "clipboard2-fill",
       name: "reports",
+      unit: "report",
     },
   ],
   titleCase: (words) =>
@@ -68,13 +71,11 @@ const helpers = {
     text: { default: "body-emphasis", active: "white" },
   },
   getRandomElement: (array) => array[Math.floor(Math.random() * array.length)],
-  listItemClickedVariant: "primary",
   connectingListName: "groups",
   badgeColor: "secondary",
 };
 
 const {
-  listItemClickedVariant,
   connectingListName,
   getRandomElement,
   joinClassNames,
@@ -174,12 +175,14 @@ export default function App() {
       .flat()
       .join("-");
 
+  console.log(connections);
+
   const getActionHandler =
     (action) =>
     ({ target: { checked } }) => {
       const { method, items } = action;
 
-      setConnections((state) => {
+      const handleGroupAction = (state) => {
         const nextState = { ...state };
 
         const group = items[1].item;
@@ -204,7 +207,43 @@ export default function App() {
         }
 
         return nextState;
-      });
+      };
+
+      const handleNonGroupAction = (state) =>
+        // perform add operation
+        // find every group where
+        // connections[group][items[1].name].has(items[1].item)
+        // for every group found, add items[0].item to
+        // group[items[0].name] (connections[group][items[0].name])
+        Object.fromEntries(
+          Object.entries(state).map((entry) => {
+            let [group, sets] = entry;
+
+            if (!sets[items[1].name].has(items[1].item)) {
+              return entry;
+            }
+
+            sets = { ...sets };
+
+            sets[items[0].name] = new Set(sets[items[0].name]);
+
+            const willAdd =
+              (method === "add" && checked) ||
+              (method === "delete" && !checked);
+
+            willAdd
+              ? sets[items[0].name].add(items[0].item)
+              : sets[items[0].name].delete(items[0].item);
+
+            return [group, sets];
+          })
+        );
+
+      setConnections(
+        items.find(({ name }) => name === "groups")
+          ? handleGroupAction
+          : handleNonGroupAction
+      );
 
       if (!("id" in action)) {
         setActiveItems([]);
@@ -339,6 +378,11 @@ export default function App() {
       .filter(([group, { users }]) => users.has(activeUser))
       .some(([group, { reports }]) => reports.has(report));
 
+  const getDoubleClickedListItem = (listName) =>
+    activeItems.find(
+      ({ type, name }) => name === listName && type === "dblclick"
+    );
+
   const renderBadge = (listName) => (
     <Badge className="shadow bg-gradient" bg={badgeColor} key={listName} pill>
       {renderIcon(findListIcon(listName))}
@@ -400,7 +444,33 @@ export default function App() {
     };
   };
 
-  const pendingAction = getActionData();
+  const pendingActionWithConnectingList = getActionData();
+
+  const getActionBetweenUserAndReport = () => {
+    const [dblClickedUser, dblClickedReport] = [
+      getDoubleClickedListItem("users"),
+      getDoubleClickedListItem("reports"),
+    ];
+
+    const isValidExchange = dblClickedUser && dblClickedReport;
+
+    if (!isValidExchange) return false;
+
+    const userIsConnectedToReport = isUserConnectedToActiveReport(activeUser);
+
+    return {
+      items: activeItems
+        .filter(({ name }) => name === "users" || name === "reports")
+        .map(({ name, item }) => ({ name, item })),
+      method: userIsConnectedToReport ? "delete" : "add",
+      checked: false,
+    };
+  };
+
+  const pendingActionBetweenDisconnectedLists = getActionBetweenUserAndReport();
+
+  const pendingAction =
+    pendingActionWithConnectingList || pendingActionBetweenDisconnectedLists;
 
   const describeAction = ({ method, items }) =>
     items
@@ -408,7 +478,11 @@ export default function App() {
         index === 0 ? method : method === "delete" ? "from" : "to",
         object,
       ])
-      .map(([key, { item }]) => [key, item])
+      .map(([key, { name: listName, item }]) => [
+        key,
+        item,
+        `(${lists.find(({ name }) => name === listName).unit})`,
+      ])
       .flat()
       .join(" ");
 
@@ -443,19 +517,6 @@ export default function App() {
       <h2 className="mb-0">{titleCase(name)}</h2>
     </div>
   );
-
-  const checkIfChangingRelationshipBetweenUserAndReport = () => {
-    const doubleClickedItems = activeItems.filter(
-      ({ type }) => type === "dblclick"
-    );
-
-    const condition =
-      doubleClickedItems.find(({ name }) => name === "users") &&
-      doubleClickedItems.find(({ name }) => name === "reports") &&
-      doubleClickedItems.length === 2;
-
-    return condition;
-  };
 
   const isListItemDisabled = ({ name: listName, item: itemName }) => {
     const doubleClickedLists = activeItems.filter(
