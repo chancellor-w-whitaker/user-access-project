@@ -162,6 +162,11 @@ const findListIcon = (listName) =>
 
 // for those active when pending exists, if pending method is delete, make active bg danger color
 
+// when you click the checkbox of the action between a user and a report,
+// bring up a dialog box where you can uncheck the groups that you do not want to affected
+// there will be a confirm button at the bottom of the dialog box
+// clicking outside of the dialog box without clicking confirm will end the pending operation (leaving the current menu intact)
+
 export default function App() {
   const [connections, setConnections] = useState(initialConnections);
 
