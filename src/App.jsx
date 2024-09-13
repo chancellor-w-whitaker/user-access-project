@@ -64,7 +64,7 @@ const usePopover = () => {
 
   useClickOutside(ref, close);
 
-  return { isOpen, open, ref };
+  return { isOpen, close, open, ref };
 };
 
 const helpers = {
@@ -215,32 +215,26 @@ const findListIcon = (listName) =>
 // there will be a confirm button at the bottom of the dialog box
 // clicking outside of the dialog box without clicking confirm will end the pending operation (leaving the current menu intact)
 
-// ! when dialog box for adding, all unchecked, and must/can only pick one (radio list)
+// * when dialog box for adding, all unchecked, and must/can only pick one (radio list)
 // ! pretty print allState below Actions
 // ! push somewhere to test
 // ! add actual data into app
 // ! save, cancel all changes
 
 export default function App() {
+  const popover = usePopover();
+
   const [connections, setConnections] = useState(initialConnections);
 
   const [activeItems, setActiveItems] = useState([]);
 
   const [savedActions, setSavedActions] = useState([]);
 
-  const allState = {
-    activeMenuItems: activeItems,
-    actionHistory: savedActions,
-    links: connections,
-  };
-
   const getActionCoordinates = (action) =>
     action.items
       .map((item) => Object.entries(item))
       .flat()
       .join("-");
-
-  console.log(connections);
 
   // delete a user from a report?
   // delete user from every group containing report
@@ -252,91 +246,153 @@ export default function App() {
   // add user to one specified group containing report
   // perform this action and save this action to saved actions
 
+  const resetMenu = () => setActiveItems([]);
+
+  // need method to get derived actions when you click the a pending add method between user & report
+  // when this takes place, pop up a dialog box where you click which group to go through
+  // if clicked, that is the action that takes place & gets added to history
+  // if click outside, action gets cancelled
+
   const getActionHandler =
     (action) =>
     ({ target: { checked } }) => {
+      popover.close();
+
       const { method, items } = action;
 
-      const handleGroupAction = (state) => {
+      const [itemOne, itemTwo] = items;
+
+      const performingAddMethod =
+        (method === "add" && checked) || (method === "delete" && !checked);
+
+      const actionContainsAGroup = items.find(({ name }) => name === "groups");
+
+      const actionIsNew = !("id" in action);
+
+      const isActionNew = (action) => !("id" in action);
+
+      const findAllActions = () => {
+        if (actionContainsAGroup) return [action];
+
+        return Object.entries(connections)
+          .filter(([group, sets]) => {
+            if (sets[itemTwo.name].has(itemTwo.item)) {
+              if (performingAddMethod) {
+                return !sets[itemOne.name].has(itemOne.item);
+              } else {
+                return sets[itemOne.name].has(itemOne.item);
+              }
+            }
+          })
+          .map(([group]) => ({
+            items: [itemOne, { name: "groups", item: group }],
+            method,
+          }));
+      };
+
+      const allActions = findAllActions();
+
+      const saveActions = (saved) => {
+        const newActions = allActions.filter((action) => isActionNew(action));
+
+        const oldActions = allActions.filter((action) => !isActionNew(action));
+
+        const newActionCoordinates = new Set(
+          newActions.map((action) => getActionCoordinates(action))
+        );
+
+        const oldActionIDs = new Set(oldActions.map(({ id }) => id));
+
+        const toBeAdded = newActions.map((action) => ({
+          ...action,
+          id: Math.random(),
+          checked,
+        }));
+
+        const currentModified = saved
+          .map((element) =>
+            oldActionIDs.has(element.id) ? { ...element, checked } : element
+          )
+          .filter(
+            (element) =>
+              !newActionCoordinates.has(getActionCoordinates(element))
+          );
+
+        return [...toBeAdded, ...currentModified];
+      };
+
+      const handleActions = (state) => {
         const nextState = { ...state };
 
-        const group = items[1].item;
+        allActions.forEach((action) => {
+          const [item1, item2] = action.items;
 
-        const listName = items[0].name;
+          nextState[item2.item] = { ...nextState[item2.item] };
 
-        const listItem = items[0].item;
+          const sets = nextState[item2.item];
 
-        nextState[group] = { ...nextState[group] };
+          sets[item1.name] = new Set(item1.name);
 
-        nextState[group][listName] = new Set(nextState[group][listName]);
-
-        const set = nextState[group][listName];
-
-        if (
-          (method === "add" && checked) ||
-          (method === "delete" && !checked)
-        ) {
-          set.add(listItem);
-        } else {
-          set.delete(listItem);
-        }
+          performingAddMethod
+            ? sets[item1.name].add(item1.item)
+            : sets[item1.name].delete(item1.item);
+        });
 
         return nextState;
       };
 
-      const handleNonGroupAction = (state) =>
-        // perform add operation
-        // find every group where
-        // connections[group][items[1].name].has(items[1].item)
-        // for every group found, add items[0].item to
-        // group[items[0].name] (connections[group][items[0].name])
-        Object.fromEntries(
-          Object.entries(state).map((entry) => {
-            let [group, sets] = entry;
+      // const handleGroupAction = (state) =>
+      //   Object.fromEntries(
+      //     Object.entries(state).map((entry) => {
+      //       let [group, sets] = entry;
 
-            if (!sets[items[1].name].has(items[1].item)) return entry;
+      //       const isNotRelevant = group !== itemTwo.item;
 
-            sets = { ...sets };
+      //       if (isNotRelevant) return entry;
 
-            sets[items[0].name] = new Set(sets[items[0].name]);
+      //       sets = { ...sets };
 
-            const willAdd =
-              (method === "add" && checked) ||
-              (method === "delete" && !checked);
+      //       sets[itemOne.name] = new Set(sets[itemOne.name]);
 
-            willAdd
-              ? sets[items[0].name].add(items[0].item)
-              : sets[items[0].name].delete(items[0].item);
+      //       performingAddMethod
+      //         ? sets[itemOne.name].add(itemOne.item)
+      //         : sets[itemOne.name].delete(itemOne.item);
 
-            return [group, sets];
-          })
-        );
+      //       return [group, sets];
+      //     })
+      //   );
 
-      setConnections(
-        items.find(({ name }) => name === "groups")
-          ? handleGroupAction
-          : handleNonGroupAction
-      );
+      // const handleNonGroupAction = (state) =>
+      //   // perform add operation
+      //   // find every group where
+      //   // connections[group][items[1].name].has(items[1].item)
+      //   // for every group found, add items[0].item to
+      //   // group[items[0].name] (connections[group][items[0].name])
+      //   Object.fromEntries(
+      //     Object.entries(state).map((entry) => {
+      //       let [group, sets] = entry;
 
-      if (!("id" in action)) {
-        setActiveItems([]);
-      }
+      //       const isNotRelevant = !sets[itemTwo.name].has(itemTwo.item);
 
-      if (!("id" in action)) {
-        setSavedActions((array) => [
-          { ...action, id: Math.random(), checked },
-          ...array.filter(
-            (element) =>
-              getActionCoordinates(element) !== getActionCoordinates(action)
-          ),
-        ]);
-      } else {
-        setSavedActions((array) =>
-          array.map((element) =>
-            element.id === action.id ? { ...element, checked } : element
-          )
-        );
-      }
+      //       if (isNotRelevant) return entry;
+
+      //       sets = { ...sets };
+
+      //       sets[itemOne.name] = new Set(sets[itemOne.name]);
+
+      //       performingAddMethod
+      //         ? sets[itemOne.name].add(itemOne.item)
+      //         : sets[itemOne.name].delete(itemOne.item);
+
+      //       return [group, sets];
+      //     })
+      //   );
+
+      setConnections(handleActions);
+
+      setSavedActions(saveActions);
+
+      if (actionIsNew) resetMenu();
     };
 
   const findActiveItem = (name) =>
@@ -392,24 +448,6 @@ export default function App() {
   const disableAllReports = activeItems.some(
     ({ name, type }) => name === "users" && type === "dblclick"
   );
-
-  const isItemDisabled = ({ name, item }) => {
-    const activeItemOfList = findActiveItem(name);
-
-    if (name === "users" && disableAllUsers) {
-      return true;
-    }
-
-    if (name === "reports" && disableAllReports) {
-      return true;
-    }
-
-    return (
-      activeItemOfList &&
-      activeItemOfList.item !== item &&
-      activeItemOfList.type === "dblclick"
-    );
-  };
 
   const isAnyListItemDoubleClicked = (name) => {
     const activeItemOfList = findActiveItem(name);
@@ -545,6 +583,27 @@ export default function App() {
   const pendingAction =
     pendingActionWithConnectingList || pendingActionBetweenDisconnectedLists;
 
+  const state = {
+    groupsTable: Object.fromEntries(
+      Object.entries(connections).map(([group, sets]) => [
+        group,
+        Object.fromEntries(
+          Object.entries(sets).map(([name, set]) => [name, [...set]])
+        ),
+      ])
+    ),
+    actions: { pending: pendingAction, history: savedActions },
+    activeMenuItems: activeItems,
+  };
+
+  const prettyState = JSON.stringify(state, undefined, 4);
+
+  console.log(state);
+
+  const launchDialog =
+    pendingActionBetweenDisconnectedLists &&
+    pendingActionBetweenDisconnectedLists.method === "add";
+
   const describeAction = ({ method, items }) =>
     items
       .map((object, index) => [
@@ -653,12 +712,56 @@ export default function App() {
                 <div className="mb-3">
                   <h5>Pending</h5>
                   {pendingAction ? (
-                    <Form.Check
-                      onChange={getActionHandler(pendingAction)}
-                      label={describeAction(pendingAction)}
-                      checked={pendingAction.checked}
-                      type="checkbox"
-                    />
+                    launchDialog ? (
+                      <div className="position-relative">
+                        <Form.Check
+                          label={describeAction(pendingAction)}
+                          checked={pendingAction.checked}
+                          onChange={popover.open}
+                          type="checkbox"
+                        />
+                        {popover.isOpen && (
+                          <div
+                            className="position-absolute top-100"
+                            ref={popover.ref}
+                          >
+                            <ListGroup>
+                              {Object.entries(connections)
+                                .filter(([group, sets]) =>
+                                  sets[pendingAction.items[1].name].has(
+                                    pendingAction.items[1].item
+                                  )
+                                )
+                                .map(([group]) => ({
+                                  items: [
+                                    pendingAction.items[0],
+                                    { name: "groups", item: group },
+                                  ],
+                                  checked: false,
+                                  method: "add",
+                                }))
+                                .map((action, index) => (
+                                  <ListGroup.Item key={index}>
+                                    <Form.Check
+                                      onChange={getActionHandler(action)}
+                                      label={describeAction(action)}
+                                      checked={action.checked}
+                                      type="checkbox"
+                                    />
+                                  </ListGroup.Item>
+                                ))}
+                            </ListGroup>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Form.Check
+                        onChange={getActionHandler(pendingAction)}
+                        label={describeAction(pendingAction)}
+                        checked={pendingAction.checked}
+                        type="checkbox"
+                      />
+                    )
                   ) : (
                     <div style={{ marginBottom: ".125rem" }}>...</div>
                   )}
@@ -679,6 +782,16 @@ export default function App() {
               </Form>
             </Col>
           </Row>
+        </Row>
+        <Row>
+          <Col>
+            <h2>State</h2>
+          </Col>
+        </Row>
+        <Row>
+          <Col>
+            <pre>{prettyState}</pre>
+          </Col>
         </Row>
       </Container>
     </>
