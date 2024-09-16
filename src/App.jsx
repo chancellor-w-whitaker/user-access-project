@@ -216,10 +216,13 @@ const findListIcon = (listName) =>
 // clicking outside of the dialog box without clicking confirm will end the pending operation (leaving the current menu intact)
 
 // * when dialog box for adding, all unchecked, and must/can only pick one (radio list)
-// ! pretty print allState below Actions
-// ! push somewhere to test
+// * pretty print allState below Actions
+// * push somewhere to test
 // ! add actual data into app
 // ! save, cancel all changes
+
+// ! notify user they are removing from many groups
+// ! issue when displaying state
 
 export default function App() {
   const popover = usePopover();
@@ -292,6 +295,8 @@ export default function App() {
 
       const allActions = findAllActions();
 
+      console.log(allActions);
+
       const saveActions = (saved) => {
         const newActions = allActions.filter((action) => isActionNew(action));
 
@@ -331,7 +336,7 @@ export default function App() {
 
           const sets = nextState[item2.item];
 
-          sets[item1.name] = new Set(item1.name);
+          sets[item1.name] = new Set(sets[item1.name]);
 
           performingAddMethod
             ? sets[item1.name].add(item1.item)
@@ -590,6 +595,9 @@ export default function App() {
         Object.fromEntries(
           Object.entries(sets).map(([name, set]) => [name, [...set]])
         ),
+        // Object.fromEntries(
+        //   Object.entries(sets).map(([name, set]) => [name, [...set]])
+        // ),
       ])
     ),
     actions: { pending: pendingAction, history: savedActions },
@@ -597,8 +605,6 @@ export default function App() {
   };
 
   const prettyState = JSON.stringify(state, undefined, 4);
-
-  console.log(state);
 
   const launchDialog =
     pendingActionBetweenDisconnectedLists &&
