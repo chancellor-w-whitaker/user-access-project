@@ -19,53 +19,8 @@ undo change, <- | ->
 
 */
 
+import { Button } from "react-bootstrap";
 import { useEffect } from "react";
-
-// Improved version of https://usehooks.com/useOnClickOutside/
-const useClickOutside = (ref, handler) => {
-  useEffect(() => {
-    let startedInside = false;
-    let startedWhenMounted = false;
-
-    const listener = (event) => {
-      // Do nothing if `mousedown` or `touchstart` started inside ref element
-      if (startedInside || !startedWhenMounted) return;
-      // Do nothing if clicking ref's element or descendent elements
-      if (!ref.current || ref.current.contains(event.target)) return;
-
-      handler(event);
-    };
-
-    const validateEventStart = (event) => {
-      startedWhenMounted = ref.current;
-      startedInside = ref.current && ref.current.contains(event.target);
-    };
-
-    document.addEventListener("mousedown", validateEventStart);
-    document.addEventListener("touchstart", validateEventStart);
-    document.addEventListener("click", listener);
-
-    return () => {
-      document.removeEventListener("mousedown", validateEventStart);
-      document.removeEventListener("touchstart", validateEventStart);
-      document.removeEventListener("click", listener);
-    };
-  }, [ref, handler]);
-};
-
-const usePopover = () => {
-  const ref = useRef();
-
-  const [isOpen, toggle] = useState(false);
-
-  const close = useCallback(() => toggle(false), []);
-
-  const open = useCallback(() => toggle(true), []);
-
-  useClickOutside(ref, close);
-
-  return { isOpen, close, open, ref };
-};
 
 const helpers = {
   lists: [
@@ -74,6 +29,7 @@ const helpers = {
       icon: "person-fill",
       name: "users",
       unit: "user",
+      newItem: "",
     },
     {
       items: [
@@ -87,6 +43,7 @@ const helpers = {
       icon: "people-fill",
       name: "groups",
       unit: "group",
+      newItem: "",
     },
     {
       items: [
@@ -100,6 +57,7 @@ const helpers = {
       icon: "clipboard2-fill",
       name: "reports",
       unit: "report",
+      newItem: "",
     },
   ],
   titleCase: (words) =>
@@ -124,39 +82,23 @@ const helpers = {
 };
 
 const {
+  lists: initialLists,
   connectingListName,
   getRandomElement,
   joinClassNames,
   iconColors,
   badgeColor,
   titleCase,
-  lists,
 } = helpers;
-
-const IconSquare = ({
-  text = iconColors.text.default,
-  bg = iconColors.bg.default,
-  className = "",
-  ...props
-}) => {
-  const inheritedClassName = `icon-square text-${text} bg-${bg} bg-gradient d-inline-flex align-items-center justify-content-center fs-4 flex-shrink-0 me-3`;
-
-  return (
-    <div
-      {...props}
-      className={joinClassNames(inheritedClassName, className)}
-    ></div>
-  );
-};
 
 const getInitialConnections = (connectingList = connectingListName) =>
   Object.fromEntries(
-    lists
+    initialLists
       .find(({ name }) => name === connectingList)
       .items.map((group) => [
         group,
         Object.fromEntries(
-          lists
+          initialLists
             .filter(({ name }) => name !== connectingList)
             .map(({ name }) => [name, new Set()])
         ),
@@ -170,12 +112,14 @@ const initializeConnection = ({ category, rules }) =>
     items.forEach((item) => initialConnections[category][name].add(item))
   );
 
-const connectingList = lists.find(({ name }) => name === connectingListName);
+const connectingList = initialLists.find(
+  ({ name }) => name === connectingListName
+);
 
 const categories = connectingList.items;
 
 const getItems = (listName) =>
-  lists.find(({ name }) => name === listName).items;
+  initialLists.find(({ name }) => name === listName).items;
 
 for (const category of categories) {
   const userItems = getItems("users");
@@ -189,9 +133,6 @@ for (const category of categories) {
 
   initializeConnection({ category, rules });
 }
-
-const findListIcon = (listName) =>
-  lists.find(({ name }) => name === listName).icon;
 
 // write method for adding item to item
 // write method for deleting item from item
@@ -225,9 +166,72 @@ const findListIcon = (listName) =>
 // ! issue when displaying state
 
 export default function App() {
-  const popover = usePopover();
-
   const [connections, setConnections] = useState(initialConnections);
+
+  const [lists, setLists] = useState(initialLists);
+
+  const typeNewListItem = (name) => (e) => {
+    const { value } = e.target;
+
+    setLists((state) =>
+      state.map((list) =>
+        list.name === name
+          ? {
+              ...list,
+              newItem: value,
+            }
+          : list
+      )
+    );
+  };
+
+  const addListItem = (e) => {
+    const { name } = e.target;
+
+    e.preventDefault();
+
+    if (name === "groups") {
+      const groupsList = lists.find(({ name: listName }) => listName === name);
+
+      const newGroup = groupsList.newItem.toLocaleLowerCase();
+
+      const allGroups = groupsList.items.map((item) =>
+        item.toLocaleLowerCase()
+      );
+
+      if (!allGroups.includes(newGroup)) {
+        setConnections((state) => ({
+          [groupsList.newItem]: { reports: new Set(), users: new Set() },
+          ...Object.fromEntries(Object.entries(state)),
+        }));
+      }
+    }
+
+    setLists((state) =>
+      state.map((list) =>
+        list.name === name
+          ? {
+              ...list,
+              items: list.items
+                .map((item) => item.toLocaleLowerCase())
+                .includes(list.newItem.toLocaleLowerCase())
+                ? list.items
+                : [list.newItem, ...list.items],
+              newItem: list.items
+                .map((item) => item.toLocaleLowerCase())
+                .includes(list.newItem.toLocaleLowerCase())
+                ? list.newItem
+                : "",
+            }
+          : list
+      )
+    );
+  };
+
+  const findListIcon = (listName) =>
+    lists.find(({ name }) => name === listName).icon;
+
+  const popover = usePopover();
 
   const [activeItems, setActiveItems] = useState([]);
 
@@ -677,34 +681,54 @@ export default function App() {
     <>
       <Container>
         <Row className="mb-3">
-          {lists.map(({ items, name, icon }, i) => (
-            <Col key={i}>
-              <Stack gap={3}>
-                {renderListHeader({ name, icon })}
-                <ListGroup>
-                  {items.map((item, j) => (
-                    <ListGroup.Item
-                      className={`d-flex gap-2 align-items-center${
-                        isItemDoubleClicked({ name, item }) &&
-                        pendingAction.method === "delete"
-                          ? " text-bg-danger border-danger"
-                          : ""
-                      }`}
-                      variant={isItemClicked({ name, item }) && "primary"}
-                      onDoubleClick={getItemClickHandler({ name, item })}
-                      onClick={getItemClickHandler({ name, item })}
-                      disabled={isListItemDisabled({ name, item })}
-                      active={isItemDoubleClicked({ name, item })}
-                      key={j}
-                    >
-                      <div className="me-auto">{item}</div>
-                      {renderBadges({ item, name })}
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              </Stack>
-            </Col>
-          ))}
+          {lists.map(({ items, name, icon }, i) => {
+            const list = lists.find(({ name: listName }) => listName === name);
+
+            return (
+              <Col key={i}>
+                <Stack gap={3}>
+                  {renderListHeader({ name, icon })}
+                  <Form onSubmit={addListItem} name={name}>
+                    <Form.Group className="mb-2">
+                      <Form.Label>New {list.unit}</Form.Label>
+                      <Form.Control
+                        value={
+                          lists.find(({ name: listName }) => listName === name)
+                            .newItem
+                        }
+                        onChange={typeNewListItem(name)}
+                        placeholder={list.unit}
+                      />
+                    </Form.Group>
+                    <Button variant="primary" type="submit">
+                      Submit
+                    </Button>
+                  </Form>
+                  <ListGroup>
+                    {items.map((item, j) => (
+                      <ListGroup.Item
+                        className={`d-flex gap-2 align-items-center${
+                          isItemDoubleClicked({ name, item }) &&
+                          pendingAction.method === "delete"
+                            ? " text-bg-danger border-danger"
+                            : ""
+                        }`}
+                        variant={isItemClicked({ name, item }) && "primary"}
+                        onDoubleClick={getItemClickHandler({ name, item })}
+                        onClick={getItemClickHandler({ name, item })}
+                        disabled={isListItemDisabled({ name, item })}
+                        active={isItemDoubleClicked({ name, item })}
+                        key={j}
+                      >
+                        <div className="me-auto">{item}</div>
+                        {renderBadges({ item, name })}
+                      </ListGroup.Item>
+                    ))}
+                  </ListGroup>
+                </Stack>
+              </Col>
+            );
+          })}
         </Row>
         <Row>
           <Row>
@@ -803,3 +827,65 @@ export default function App() {
     </>
   );
 }
+
+// Improved version of https://usehooks.com/useOnClickOutside/
+const useClickOutside = (ref, handler) => {
+  useEffect(() => {
+    let startedInside = false;
+    let startedWhenMounted = false;
+
+    const listener = (event) => {
+      // Do nothing if `mousedown` or `touchstart` started inside ref element
+      if (startedInside || !startedWhenMounted) return;
+      // Do nothing if clicking ref's element or descendent elements
+      if (!ref.current || ref.current.contains(event.target)) return;
+
+      handler(event);
+    };
+
+    const validateEventStart = (event) => {
+      startedWhenMounted = ref.current;
+      startedInside = ref.current && ref.current.contains(event.target);
+    };
+
+    document.addEventListener("mousedown", validateEventStart);
+    document.addEventListener("touchstart", validateEventStart);
+    document.addEventListener("click", listener);
+
+    return () => {
+      document.removeEventListener("mousedown", validateEventStart);
+      document.removeEventListener("touchstart", validateEventStart);
+      document.removeEventListener("click", listener);
+    };
+  }, [ref, handler]);
+};
+
+const usePopover = () => {
+  const ref = useRef();
+
+  const [isOpen, toggle] = useState(false);
+
+  const close = useCallback(() => toggle(false), []);
+
+  const open = useCallback(() => toggle(true), []);
+
+  useClickOutside(ref, close);
+
+  return { isOpen, close, open, ref };
+};
+
+const IconSquare = ({
+  text = iconColors.text.default,
+  bg = iconColors.bg.default,
+  className = "",
+  ...props
+}) => {
+  const inheritedClassName = `icon-square text-${text} bg-${bg} bg-gradient d-inline-flex align-items-center justify-content-center fs-4 flex-shrink-0 me-3`;
+
+  return (
+    <div
+      {...props}
+      className={joinClassNames(inheritedClassName, className)}
+    ></div>
+  );
+};
