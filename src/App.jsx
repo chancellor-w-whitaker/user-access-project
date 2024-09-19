@@ -134,6 +134,42 @@ for (const category of categories) {
   initializeConnection({ category, rules });
 }
 
+const saved = {
+  "financial aid": {
+    reports: ["program review", "scholarship dashboard"],
+    users: ["autumn", "josh"],
+  },
+  "institutional effectiveness": {
+    reports: ["factbook", "service region map"],
+    users: ["ethan"],
+  },
+  "human resources": {
+    reports: ["program review", "fast facts"],
+    users: ["zoie", "chase"],
+  },
+  "big e central": {
+    reports: ["fast facts", "program review"],
+    users: ["autumn", "josh"],
+  },
+  "president's council": {
+    reports: ["scholarship dashboard"],
+    users: ["josh", "zoie"],
+  },
+  "institutional research": {
+    reports: ["scholarship dashboard"],
+    users: ["zoie"],
+  },
+};
+
+const savedSets = Object.fromEntries(
+  Object.entries(saved).map(([key, { reports, users }]) => [
+    key,
+    { reports: new Set(reports), users: new Set(users) },
+  ])
+);
+
+console.log(savedSets);
+
 // write method for adding item to item
 // write method for deleting item from item
 
@@ -166,7 +202,7 @@ for (const category of categories) {
 // ! issue when displaying state
 
 export default function App() {
-  const [connections, setConnections] = useState(initialConnections);
+  const [connections, setConnections] = useState(savedSets);
 
   const [lists, setLists] = useState(initialLists);
 
